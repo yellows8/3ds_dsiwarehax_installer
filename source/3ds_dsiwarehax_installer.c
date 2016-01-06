@@ -231,6 +231,22 @@ Result loadsave_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savebuf_maxsize,
 	return load_file(str, savebuf, savebuf_maxsize, actual_savesize);
 }
 
+Result terminatelaunch_am(u32 type)
+{
+	Result ret=0;
+	u64 titleid = 0x0004013000001502ULL;
+
+	ret = nsInit();
+	if(ret)return ret;
+
+	if(type==0)ret = NS_TerminateProcessTID(titleid);
+	if(type==1)ret = NS_LaunchTitle(titleid, 0, NULL);
+
+	nsExit();
+
+	return ret;
+}
+
 Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 {
 	return 0;
@@ -240,7 +256,7 @@ int main(int argc, char **argv)
 {
 	Result ret = 0;
 	int menuindex = 0;
-	int haxinstalled = 0;
+	int reboot_required = 0;
 	u32 pos;
 
 	u8 *savebuf;
@@ -304,7 +320,7 @@ int main(int argc, char **argv)
 	if(ret>=0)
 	{
 		memset(headerstr, 0, sizeof(headerstr));
-		snprintf(headerstr, sizeof(headerstr)-1, "3ds_dsiwarehax_installer %s by yellows8.\n\nSelect a DSiWare exploit to install with the below menu(the hex word is the detected DSiWare titleID-low on your system). You can press the B button to exit, this will do a hardware-reboot if any exploit(s) were installed. You can press the Y button at any time while at a menu like the below one, to toggle the screen being used by this app", VERSION);
+		snprintf(headerstr, sizeof(headerstr)-1, "3ds_dsiwarehax_installer %s by yellows8.\n\nSelect a DSiWare exploit to install with the below menu(the hex word is the detected DSiWare titleID-low on your system). You can press the B button to exit, this will do a hardware-reboot if needed due to exploit installation. You can press the Y button at any time while at a menu like the below one, to toggle the screen being used by this app", VERSION);
 
 		while(ret==0)
 		{
@@ -312,7 +328,7 @@ int main(int argc, char **argv)
 
 			if(menuindex==-1)
 			{
-				if(haxinstalled)
+				if(reboot_required)
 				{
 					consoleClear();
 					gfxExit();
@@ -338,6 +354,7 @@ int main(int argc, char **argv)
 
 			if(ret==0)
 			{
+				printf("Loading the savedata from SD...\n");
 				ret = loadsave_dsiwarehax(&dsiware_list[menuindex], savebuf, savebuf_maxsize, &savesize);
 				if(ret)
 				{
@@ -347,21 +364,31 @@ int main(int argc, char **argv)
 
 			if(ret==0)
 			{
-				ret = install_dsiwarehax(&dsiware_list[menuindex], savebuf, savesize);
+				printf("Terminating the AM sysmodule...\n");
+				ret = terminatelaunch_am(0);
+				if(ret==0)reboot_required = 1;
+			}
 
-				if(ret==0)
-				{
-					printf("The exploit was successfully installed.\n");
-					haxinstalled = 1;
-					displaymessage_waitbutton();
-				}
-				else
-				{
-					printf("Exploit installation failed: 0x%08x.\n", (unsigned int)ret);
-				}
+			if(ret==0)
+			{
+				printf("Installing the savedata...\n");
+				ret = install_dsiwarehax(&dsiware_list[menuindex], savebuf, savesize);
 			}
 
 			if(savebuf)free(savebuf);
+
+			printf("Launching the AM sysmodule...\n");
+			terminatelaunch_am(1);
+
+			if(ret==0)
+			{
+				printf("The exploit was successfully installed.\n");
+				displaymessage_waitbutton();
+			}
+			else
+			{
+				printf("Exploit installation failed: 0x%08x.\n", (unsigned int)ret);
+			}
 		}
 	}
 
