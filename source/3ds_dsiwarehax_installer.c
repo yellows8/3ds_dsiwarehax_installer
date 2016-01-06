@@ -220,7 +220,18 @@ Result loadnand_dsiware_titlelist()
 	return 0;
 }
 
-Result install_dsiwarehax(u32 index)
+Result loadsave_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savebuf_maxsize, u32 *actual_savesize)
+{
+	char str[256];
+
+	memset(str, 0, sizeof(str));
+
+	snprintf(str, sizeof(str)-1, "%s/public.sav", ent->dirpath);
+
+	return load_file(str, savebuf, savebuf_maxsize, actual_savesize);
+}
+
+Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 {
 	return 0;
 }
@@ -231,6 +242,9 @@ int main(int argc, char **argv)
 	int menuindex = 0;
 	int haxinstalled = 0;
 	u32 pos;
+
+	u8 *savebuf;
+	u32 savebuf_maxsize = 0x100000, savesize;
 
 	char headerstr[512];
 
@@ -312,18 +326,42 @@ int main(int argc, char **argv)
 
 			consoleClear();
 
-			ret = install_dsiwarehax(menuindex);
+			savesize = 0;
+
+			savebuf = malloc(savebuf_maxsize);
+			if(savebuf==NULL)
+			{
+				printf("Failed to allocate memory for the savedata.\n");
+				ret = -2;
+			}
+			memset(savebuf, 0, savebuf_maxsize);
 
 			if(ret==0)
 			{
-				printf("The exploit was successfully installed.\n");
-				haxinstalled = 1;
-				displaymessage_waitbutton();
+				ret = loadsave_dsiwarehax(&dsiware_list[menuindex], savebuf, savebuf_maxsize, &savesize);
+				if(ret)
+				{
+					printf("Failed to load the dsiwarehax savedata: 0x%08x.\n", (unsigned int)ret);
+				}
 			}
-			else
+
+			if(ret==0)
 			{
-				printf("Exploit installation failed: 0x%08x.\n", (unsigned int)ret);
+				ret = install_dsiwarehax(&dsiware_list[menuindex], savebuf, savesize);
+
+				if(ret==0)
+				{
+					printf("The exploit was successfully installed.\n");
+					haxinstalled = 1;
+					displaymessage_waitbutton();
+				}
+				else
+				{
+					printf("Exploit installation failed: 0x%08x.\n", (unsigned int)ret);
+				}
 			}
+
+			if(savebuf)free(savebuf);
 		}
 	}
 
