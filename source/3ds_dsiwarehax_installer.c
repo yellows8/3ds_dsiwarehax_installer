@@ -21,6 +21,8 @@ dsiware_entry dsiware_list[MAX_DSIWARE];
 
 char *dsiware_menuentries[MAX_DSIWARE];
 
+void initsrv_allservices();
+
 void display_menu(char **menu_entries, int total_entries, int *menuindex, char *headerstr)
 {
 	int i;
@@ -249,7 +251,27 @@ Result terminatelaunch_am(u32 type)
 
 Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 {
-	return 0;
+	Result ret=0;
+
+	ret = ampxiInit(0);
+	if(ret)
+	{
+		if(ret==0xd8e06406)
+		{
+			printf("The AMPXI service is inaccessible. Attempting to get access via kernelmode, this will hang the system if svcBackdoor isn't accessible.\n");
+			initsrv_allservices();
+			printf("Attempting to init the AMPXI service-handle again...\n");
+			ret = ampxiInit(0);
+			if(ret==0)printf("AMPXI init was successful.\n");
+		}
+		if(ret)return ret;
+	}
+
+	ret = ampxiWriteTWLSavedata(ent->titleid, savebuf, savesize, 0, 5, 5);
+
+	ampxiExit();
+
+	return ret;
 }
 
 int main(int argc, char **argv)
@@ -326,19 +348,7 @@ int main(int argc, char **argv)
 		{
 			display_menu(dsiware_menuentries, dsiware_total, &menuindex, headerstr);
 
-			if(menuindex==-1)
-			{
-				if(reboot_required)
-				{
-					consoleClear();
-					gfxExit();
-					aptOpenSession();//Do a hardware reboot.
-					APT_HardwareResetAsync();
-					aptCloseSession();
-					return 0;
-				}
-				break;
-			}
+			if(menuindex==-1)break;
 
 			consoleClear();
 
@@ -366,13 +376,18 @@ int main(int argc, char **argv)
 			{
 				printf("Terminating the AM sysmodule...\n");
 				ret = terminatelaunch_am(0);
-				if(ret==0)reboot_required = 1;
+				if(ret==0)
+				{
+					reboot_required = 1;
+					svcSleepThread(1000000000ULL);//Sleep 1 second.
+				}
 			}
 
 			if(ret==0)
 			{
 				printf("Installing the savedata...\n");
 				ret = install_dsiwarehax(&dsiware_list[menuindex], savebuf, savesize);
+				if(ret)printf("Failed to install the savedata: 0x%08x.\n", (unsigned int)ret);
 			}
 
 			if(savebuf)free(savebuf);
@@ -409,6 +424,16 @@ int main(int argc, char **argv)
 		u32 kDown = hidKeysDown();
 		if (kDown & KEY_START)
 			break; // break in order to return to hbmenu
+	}
+
+	if(reboot_required)
+	{
+		consoleClear();
+		gfxExit();
+		aptOpenSession();//Do a hardware reboot.
+		APT_HardwareResetAsync();
+		aptCloseSession();
+		return 0;
 	}
 
 	// Exit services
