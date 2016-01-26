@@ -254,7 +254,7 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	Result ret=0;
 
 	ret = ampxiInit(0);
-	if(ret)
+	if(ret<0)
 	{
 		if(ret==0xd8e06406)
 		{
@@ -264,10 +264,17 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 			ret = ampxiInit(0);
 			if(ret==0)printf("AMPXI init was successful.\n");
 		}
-		if(ret)return ret;
+		if(ret<0)return ret;
 	}
 
 	ret = ampxiWriteTWLSavedata(ent->titleid, savebuf, savesize, 0, 5, 5);
+	if(ret<0)printf("ampxiWriteTWLSavedata failed: 0x%08x.\n", (unsigned int)ret);
+
+	if(ret==0)
+	{
+		ret = ampxiInstallTitlesFinish(MEDIATYPE_NAND, 0, 1, &ent->titleid);
+		if(ret<0)printf("ampxiInstallTitlesFinish failed: 0x%08x.\n", (unsigned int)ret);
+	}
 
 	ampxiExit();
 
