@@ -136,6 +136,7 @@ Result loadnand_dsiware_titlelist()
 {
 	Result ret=0;
 	u32 titlecount=0;
+	u32 titlesRead=0;
 	u64 *tidbuf;
 	u32 pos, i;
 	u32 entcount = 0;
@@ -162,11 +163,11 @@ Result loadnand_dsiware_titlelist()
 		return -2;
 	}
 
-	ret = AM_GetTitleIdList(MEDIATYPE_NAND, titlecount, tidbuf);
-	if(ret)
+	ret = AM_GetTitleList(&titlesRead, MEDIATYPE_NAND, titlecount, tidbuf);
+	if(ret || titlesRead!=titlecount)
 	{
 		free(tidbuf);
-		printf("AM_GetTitleIdList failed: 0x%08x.\n", (unsigned int)ret);
+		printf("AM_GetTitleIdList failed: 0x%08x. titlesRead = 0x%x while titlecount = 0x%x.\n", (unsigned int)ret, (unsigned int)titlesRead, (unsigned int)titlecount);
 		return ret;
 	}
 
@@ -267,13 +268,13 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 		if(ret<0)return ret;
 	}
 
-	ret = ampxiWriteTWLSavedata(ent->titleid, savebuf, savesize, 0, 5, 5);
-	if(ret<0)printf("ampxiWriteTWLSavedata failed: 0x%08x.\n", (unsigned int)ret);
+	ret = AMPXI_WriteTWLSavedata(ent->titleid, savebuf, savesize, 0, 5, 11);
+	if(ret<0)printf("AMPXI_WriteTWLSavedata failed: 0x%08x.\n", (unsigned int)ret);
 
 	if(ret==0)
 	{
-		ret = ampxiInstallTitlesFinish(MEDIATYPE_NAND, 0, 1, &ent->titleid);
-		if(ret<0)printf("ampxiInstallTitlesFinish failed: 0x%08x.\n", (unsigned int)ret);
+		ret = AMPXI_InstallTitlesFinish(MEDIATYPE_NAND, 0, 1, &ent->titleid);
+		if(ret<0)printf("AMPXI_InstallTitlesFinish failed: 0x%08x.\n", (unsigned int)ret);
 	}
 
 	ampxiExit();
@@ -437,9 +438,7 @@ int main(int argc, char **argv)
 	{
 		consoleClear();
 		gfxExit();
-		aptOpenSession();//Do a hardware reboot.
-		APT_HardwareResetAsync();
-		aptCloseSession();
+		APT_HardwareResetAsync();//Do a hardware reboot.
 		return 0;
 	}
 
