@@ -5,3 +5,4 @@ The former writes the "public.new" file into TWLNAND fine, however the latter ju
 
 Hence, this installer isn't actually usable currently. If/when this installer ever works correctly at all(ideally without requiring anything additional arm9-side-related), a release-archive containing the app + the required DSiWare exploits would be released.
 
+Reimplementing the DSiWare-importing done by AM-sysmodule is probably the only way to get the intended savedata installed, without doing a lot of sysmodule patching.
