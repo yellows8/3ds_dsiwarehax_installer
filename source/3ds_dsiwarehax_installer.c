@@ -234,7 +234,7 @@ Result loadsave_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savebuf_maxsize,
 	return load_file(str, savebuf, savebuf_maxsize, actual_savesize);
 }
 
-Result terminatelaunch_am(u32 type)
+/*Result terminatelaunch_am(u32 type)
 {
 	Result ret=0;
 	u64 titleid = 0x0004013000001502ULL;
@@ -248,13 +248,23 @@ Result terminatelaunch_am(u32 type)
 	nsExit();
 
 	return ret;
-}
+}*/
 
 Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 {
 	Result ret=0;
+	u8 *workbuf = NULL;
+	u32 workbuf_size = 0x20000;
+	Handle filehandle=0;
 
-	ret = ampxiInit(0);
+	FS_Path archPath = { PATH_EMPTY, 1, (u8*)"" };
+	FS_Path filePath;
+
+	size_t len=255;
+	ssize_t units=0;
+	uint16_t filepath16[256];
+
+	/*ret = ampxiInit(0);
 	if(ret<0)
 	{
 		if(ret==0xd8e06406)
@@ -277,7 +287,65 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 		if(ret<0)printf("AMPXI_InstallTitlesFinish failed: 0x%08x.\n", (unsigned int)ret);
 	}
 
-	ampxiExit();
+	ampxiExit();*/
+
+	ret = amInit();
+	if(R_FAILED(ret))return ret;
+
+	workbuf_size+= 0x10000;
+
+	workbuf = malloc(workbuf_size);
+	if(workbuf==NULL)
+	{
+		amExit();
+		return -1;
+	}
+	memset(workbuf, 0, workbuf_size);
+
+	workbuf_size-= 0x10000;
+
+	printf("Exporting DSiWare to SD, this may take a while...\n");
+	ret = AM_ExportTwlBackup(ent->titleid, 11, workbuf, workbuf_size, "sdmc:/3dsdsiware.bin");
+	if(R_FAILED(ret))
+	{
+		free(workbuf);
+		amExit();
+		return ret;
+	}
+
+	memset(filepath16, 0, sizeof(filepath16));
+	units = utf8_to_utf16(filepath16, (uint8_t*)"/3dsdsiware.bin", len);
+	if(units < 0 || units > len)
+	{
+		free(workbuf);
+		amExit();
+		return -2;
+	}
+
+	filePath.type = PATH_UTF16;
+	filePath.size = (units+1)*sizeof(uint16_t);
+	filePath.data = (const u8*)filepath16;
+
+	printf("Opening exported file...\n");
+
+	ret = FSUSER_OpenFileDirectly(&filehandle, ARCHIVE_SDMC, archPath, filePath, FS_OPEN_READ, 0);
+	if(R_FAILED(ret))
+	{
+		free(workbuf);
+		amExit();
+		return ret;
+	}
+
+	printf("Importing DSiWare...\n");
+
+	memset(workbuf, 0, workbuf_size);
+	ret = AM_ImportTwlBackup(filehandle, 11, workbuf, workbuf_size);
+
+	FSFILE_Close(filehandle);
+
+	free(workbuf);
+
+	amExit();
 
 	return ret;
 }
@@ -380,7 +448,7 @@ int main(int argc, char **argv)
 				}
 			}
 
-			if(ret==0)
+			/*if(ret==0)
 			{
 				printf("Terminating the AM sysmodule...\n");
 				ret = terminatelaunch_am(0);
@@ -389,7 +457,7 @@ int main(int argc, char **argv)
 					reboot_required = 1;
 					svcSleepThread(1000000000ULL);//Sleep 1 second.
 				}
-			}
+			}*/
 
 			if(ret==0)
 			{
@@ -400,8 +468,8 @@ int main(int argc, char **argv)
 
 			if(savebuf)free(savebuf);
 
-			printf("Launching the AM sysmodule...\n");
-			terminatelaunch_am(1);
+			//printf("Launching the AM sysmodule...\n");
+			//terminatelaunch_am(1);
 
 			if(ret==0)
 			{
