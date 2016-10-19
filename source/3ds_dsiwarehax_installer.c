@@ -23,6 +23,10 @@ char *dsiware_menuentries[MAX_DSIWARE];
 
 void initsrv_allservices();
 
+extern u8 ampatch_start[];
+extern u8 amstub_start[];
+extern u32 amstub_size;
+
 void display_menu(char **menu_entries, int total_entries, int *menuindex, char *headerstr)
 {
 	int i;
@@ -234,7 +238,7 @@ Result loadsave_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savebuf_maxsize,
 	return load_file(str, savebuf, savebuf_maxsize, actual_savesize);
 }
 
-/*Result terminatelaunch_am(u32 type)
+Result terminatelaunch_am(u32 type, u32 *pid)
 {
 	Result ret=0;
 	u64 titleid = 0x0004013000001502ULL;
@@ -243,19 +247,34 @@ Result loadsave_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savebuf_maxsize,
 	if(ret)return ret;
 
 	if(type==0)ret = NS_TerminateProcessTID(titleid);
-	if(type==1)ret = NS_LaunchTitle(titleid, 0, NULL);
+	if(type==1)ret = NS_LaunchTitle(titleid, 0, pid);
 
 	nsExit();
 
 	return ret;
-}*/
+}
+
+void setup_am_patches()
+{
+	u8 *amtext = (u8*)0x0f000000;
+	u32 ampxi_funcoffset = 0x0010e568-0x00100000;
+
+	//Target function is LT_10e568/pxiam_cmd46, called @ thumb 0x10d1ee. (sysmodule v9217 from >=10.0.0-27)
+
+	memcpy(amtext, amstub_start, amstub_size);
+	memcpy(amtext, &amtext[ampxi_funcoffset], 8);
+	*((u32*)&amtext[0xc]) = (ampxi_funcoffset+0x00100000+0x8) | 1;
+	memcpy(&amtext[ampxi_funcoffset], ampatch_start, 8);
+}
 
 Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 {
 	Result ret=0;
 	u8 *workbuf = NULL;
-	u32 workbuf_size = 0x20000;
+	u32 workbuf_size = 0x20000+0x4000;
 	Handle filehandle=0;
+	u32 ampid = 0;
+	Handle amproc = 0;
 
 	FS_Path archPath = { PATH_EMPTY, 1, (u8*)"" };
 	FS_Path filePath;
@@ -289,10 +308,33 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 
 	ampxiExit();*/
 
-	ret = amInit();
+	printf("Getting AM-module PID...\n");
+	ret = terminatelaunch_am(1, &ampid);
 	if(R_FAILED(ret))return ret;
 
-	workbuf_size+= 0x10000;
+	printf("SVCs will now be used which are normally not accessible, this will hang if these are not accessible.\n");
+
+	ret = svcOpenProcess(&amproc, ampid);
+	if(R_FAILED(ret))return ret;
+
+	//Map AM-module .text+0(0x00100000) up to size 0x14000, to vaddr 0x0f000000 in the current process.
+	ret = svcMapProcessMemory(amproc, 0x0f000000, 0x14000);
+	if(R_FAILED(ret))
+	{
+		svcCloseHandle(amproc);
+		return ret;
+	}
+
+	setup_am_patches();
+
+	ret = svcUnmapProcessMemory(amproc, 0x0f000000, 0x14000);
+	svcCloseHandle(amproc);
+	if(R_FAILED(ret))return ret;
+
+	printf("AM-module patching finished.\n");
+
+	ret = amInit();
+	if(R_FAILED(ret))return ret;
 
 	workbuf = malloc(workbuf_size);
 	if(workbuf==NULL)
@@ -301,8 +343,6 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 		return -1;
 	}
 	memset(workbuf, 0, workbuf_size);
-
-	workbuf_size-= 0x10000;
 
 	printf("Exporting DSiWare to SD, this may take a while...\n");
 	ret = AM_ExportTwlBackup(ent->titleid, 11, workbuf, workbuf_size, "sdmc:/3dsdsiware.bin");
@@ -338,7 +378,7 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 
 	printf("Importing DSiWare...\n");
 
-	memset(workbuf, 0, workbuf_size);
+	memset(workbuf, 0x44, workbuf_size);
 	ret = AM_ImportTwlBackup(filehandle, 11, workbuf, workbuf_size);
 
 	FSFILE_Close(filehandle);
@@ -451,7 +491,7 @@ int main(int argc, char **argv)
 			/*if(ret==0)
 			{
 				printf("Terminating the AM sysmodule...\n");
-				ret = terminatelaunch_am(0);
+				ret = terminatelaunch_am(0, NULL);
 				if(ret==0)
 				{
 					reboot_required = 1;
@@ -469,7 +509,7 @@ int main(int argc, char **argv)
 			if(savebuf)free(savebuf);
 
 			//printf("Launching the AM sysmodule...\n");
-			//terminatelaunch_am(1);
+			//terminatelaunch_am(1, NULL);
 
 			if(ret==0)
 			{
