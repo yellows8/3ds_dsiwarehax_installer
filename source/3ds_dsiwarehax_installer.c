@@ -271,7 +271,7 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 {
 	Result ret=0;
 	u8 *workbuf = NULL;
-	u32 workbuf_size = 0x20000+0x4000;
+	u32 workbuf_size = 0x20000;
 	Handle filehandle=0;
 	u32 ampid = 0;
 	Handle amproc = 0;
@@ -336,6 +336,8 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	ret = amInit();
 	if(R_FAILED(ret))return ret;
 
+	workbuf_size+= 0x20000;
+
 	workbuf = malloc(workbuf_size);
 	if(workbuf==NULL)
 	{
@@ -378,7 +380,8 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 
 	printf("Importing DSiWare...\n");
 
-	memset(workbuf, 0x44, workbuf_size);
+	memset(workbuf, 0, workbuf_size);
+	memcpy(&workbuf[0x20000], savebuf, savesize);//Used by the amstub, so that this custom savedata is used instead of the data originally from the DSiWare export.
 	ret = AM_ImportTwlBackup(filehandle, 11, workbuf, workbuf_size);
 
 	FSFILE_Close(filehandle);
