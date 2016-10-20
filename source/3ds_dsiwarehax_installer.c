@@ -251,27 +251,51 @@ Result launch_am(u32 *pid)
 	return ret;
 }
 
-void setup_am_patches()
+Result setup_am_patches(u8 *tmpbuf, u32 tmpbuf_size, u32 *out_offset)
 {
 	u8 *amtext = (u8*)0x0f000000;
 	u32 ampxi_funcoffset = 0x0010e568-0x00100000;
 
 	//Target function is LT_10e568/pxiam_cmd46, called @ thumb 0x10d1ee. (sysmodule v9217 from >=10.0.0-27)
 
+	if(out_offset)*out_offset = ampxi_funcoffset;
+
+	if(tmpbuf_size < 8+amstub_size)return -1;
+
+	memcpy(&tmpbuf[8], amtext, amstub_size);
+	memcpy(tmpbuf, &amtext[ampxi_funcoffset], 8);
+
 	memcpy(amtext, amstub_start, amstub_size);
 	memcpy(amtext, &amtext[ampxi_funcoffset], 8);
 	*((u32*)&amtext[0xc]) = (ampxi_funcoffset+0x00100000+0x8) | 1;
 	memcpy(&amtext[ampxi_funcoffset], ampatch_start, 8);
+
+	return 0;
+}
+
+Result restore_amtext(u8 *tmpbuf, u32 tmpbuf_size, u32 ampxi_funcoffset)
+{
+	u8 *amtext = (u8*)0x0f000000;
+
+	if(tmpbuf_size < 8+amstub_size)return -1;
+
+	memcpy(amtext, &tmpbuf[8], amstub_size);
+	memcpy(&amtext[ampxi_funcoffset], tmpbuf, 8);
+
+	return 0;
 }
 
 Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 {
 	Result ret=0;
+	u8 *tmpbuf = NULL;
+	u32 tmpbuf_size = 0x1000;
 	u8 *workbuf = NULL;
 	u32 workbuf_size = 0x20000;
 	Handle filehandle=0;
 	u32 ampid = 0;
 	Handle amproc = 0;
+	u32 ampxi_funcoffset=0;
 
 	FS_Path archPath = { PATH_EMPTY, 1, (u8*)"" };
 	FS_Path filePath;
@@ -280,28 +304,51 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	ssize_t units=0;
 	uint16_t filepath16[256];
 
+	tmpbuf = malloc(tmpbuf_size);
+	if(tmpbuf==NULL)return -1;
+	memset(tmpbuf, 0, tmpbuf_size);
+
 	printf("Getting AM-module PID...\n");
 	ret = launch_am(&ampid);
-	if(R_FAILED(ret))return ret;
+	if(R_FAILED(ret))
+	{
+		free(tmpbuf);
+		return ret;
+	}
 
 	printf("SVCs will now be used which are normally not accessible, this will hang if these are not accessible.\n");
 
 	ret = svcOpenProcess(&amproc, ampid);
-	if(R_FAILED(ret))return ret;
+	if(R_FAILED(ret))
+	{
+		free(tmpbuf);
+		return ret;
+	}
 
 	//Map AM-module .text+0(0x00100000) up to size 0x14000, to vaddr 0x0f000000 in the current process.
 	ret = svcMapProcessMemory(amproc, 0x0f000000, 0x14000);
 	if(R_FAILED(ret))
 	{
+		free(tmpbuf);
 		svcCloseHandle(amproc);
 		return ret;
 	}
 
-	setup_am_patches();
+	ret = setup_am_patches(tmpbuf, tmpbuf_size, &ampxi_funcoffset);
+	if(R_FAILED(ret))
+	{
+		free(tmpbuf);
+		svcCloseHandle(amproc);
+		return ret;
+	}
 
 	ret = svcUnmapProcessMemory(amproc, 0x0f000000, 0x14000);
-	svcCloseHandle(amproc);
-	if(R_FAILED(ret))return ret;
+	if(R_FAILED(ret))
+	{
+		free(tmpbuf);
+		svcCloseHandle(amproc);
+		return ret;
+	}
 
 	printf("AM-module patching finished.\n");
 
@@ -310,7 +357,8 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	workbuf = malloc(workbuf_size);
 	if(workbuf==NULL)
 	{
-		amExit();
+		free(tmpbuf);
+		svcCloseHandle(amproc);
 		return -1;
 	}
 	memset(workbuf, 0, workbuf_size);
@@ -319,8 +367,9 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	ret = AM_ExportTwlBackup(ent->titleid, 11, workbuf, workbuf_size, "sdmc:/3dsdsiware.bin");
 	if(R_FAILED(ret))
 	{
+		free(tmpbuf);
 		free(workbuf);
-		amExit();
+		svcCloseHandle(amproc);
 		return ret;
 	}
 
@@ -328,8 +377,9 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	units = utf8_to_utf16(filepath16, (uint8_t*)"/3dsdsiware.bin", len);
 	if(units < 0 || units > len)
 	{
+		free(tmpbuf);
 		free(workbuf);
-		amExit();
+		svcCloseHandle(amproc);
 		return -2;
 	}
 
@@ -342,8 +392,9 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	ret = FSUSER_OpenFileDirectly(&filehandle, ARCHIVE_SDMC, archPath, filePath, FS_OPEN_READ, 0);
 	if(R_FAILED(ret))
 	{
+		free(tmpbuf);
 		free(workbuf);
-		amExit();
+		svcCloseHandle(amproc);
 		return ret;
 	}
 
@@ -355,7 +406,30 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 
 	FSFILE_Close(filehandle);
 
+	memset(workbuf, 0, workbuf_size);
 	free(workbuf);
+
+	printf("Restoring AM-module .text...\n");
+
+	ret = svcMapProcessMemory(amproc, 0x0f000000, 0x14000);
+	if(R_FAILED(ret))
+	{
+		free(tmpbuf);
+		svcCloseHandle(amproc);
+		return ret;
+	}
+
+	ret = restore_amtext(tmpbuf, tmpbuf_size, ampxi_funcoffset);
+	memset(tmpbuf, 0, tmpbuf_size);
+	free(tmpbuf);
+	if(R_FAILED(ret))
+	{
+		svcCloseHandle(amproc);
+		return ret;
+	}
+
+	ret = svcUnmapProcessMemory(amproc, 0x0f000000, 0x14000);
+	svcCloseHandle(amproc);
 
 	return ret;
 }
