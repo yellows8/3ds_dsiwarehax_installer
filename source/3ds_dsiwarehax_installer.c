@@ -438,7 +438,6 @@ int main(int argc, char **argv)
 {
 	Result ret = 0;
 	int menuindex = 0;
-	int reboot_required = 0;
 	u32 pos;
 
 	u8 *savebuf;
@@ -500,7 +499,7 @@ int main(int argc, char **argv)
 	if(ret>=0)
 	{
 		memset(headerstr, 0, sizeof(headerstr));
-		snprintf(headerstr, sizeof(headerstr)-1, "3ds_dsiwarehax_installer %s by yellows8.\n\nSelect a DSiWare exploit to install with the below menu(the hex word is the detected DSiWare titleID-low on your system). You can press the B button to exit, this will do a hardware-reboot if needed due to exploit installation. You can press the Y button at any time while at a menu like the below one, to toggle the screen being used by this app", VERSION);
+		snprintf(headerstr, sizeof(headerstr)-1, "3ds_dsiwarehax_installer %s by yellows8.\n\nSelect a DSiWare exploit to install with the below menu(the hex word is the detected DSiWare titleID-low on your system). You can press the B button to exit. You can press the Y button at any time while at a menu like the below one, to toggle the screen being used by this app", VERSION);
 
 		while(ret==0)
 		{
@@ -532,7 +531,7 @@ int main(int argc, char **argv)
 
 			if(ret==0)
 			{
-				printf("Installing the savedata...\n");
+				printf("Preparing exploit installation...\n");
 				ret = install_dsiwarehax(&dsiware_list[menuindex], savebuf, savesize);
 				if(ret)printf("Failed to install the savedata: 0x%08x.\n", (unsigned int)ret);
 			}
@@ -551,9 +550,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	amExit();
-
 	if(ret!=0)printf("An error occured. You can report this to here if it persists(or comment on an already existing issue if needed), with a screenshot: https://github.com/yellows8/3ds_dsiwarehax_installer/issues\n");
+
+	amExit();
 
 	for(pos=0; pos<MAX_DSIWARE; pos++)
 	{
@@ -570,14 +569,6 @@ int main(int argc, char **argv)
 		u32 kDown = hidKeysDown();
 		if (kDown & KEY_START)
 			break; // break in order to return to hbmenu
-	}
-
-	if(reboot_required)
-	{
-		consoleClear();
-		gfxExit();
-		APT_HardwareResetAsync();//Do a hardware reboot.
-		return 0;
 	}
 
 	// Exit services
