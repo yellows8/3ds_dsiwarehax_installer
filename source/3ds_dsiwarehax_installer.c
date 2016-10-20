@@ -21,8 +21,6 @@ dsiware_entry dsiware_list[MAX_DSIWARE];
 
 char *dsiware_menuentries[MAX_DSIWARE];
 
-void initsrv_allservices();
-
 extern u8 ampatch_start[];
 extern u8 amstub_start[];
 extern u32 amstub_size;
@@ -238,7 +236,7 @@ Result loadsave_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savebuf_maxsize,
 	return load_file(str, savebuf, savebuf_maxsize, actual_savesize);
 }
 
-Result terminatelaunch_am(u32 type, u32 *pid)
+Result launch_am(u32 *pid)
 {
 	Result ret=0;
 	u64 titleid = 0x0004013000001502ULL;
@@ -246,8 +244,7 @@ Result terminatelaunch_am(u32 type, u32 *pid)
 	ret = nsInit();
 	if(ret)return ret;
 
-	if(type==0)ret = NS_TerminateProcessTID(titleid);
-	if(type==1)ret = NS_LaunchTitle(titleid, 0, pid);
+	ret = NS_LaunchTitle(titleid, 0, pid);
 
 	nsExit();
 
@@ -283,33 +280,8 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	ssize_t units=0;
 	uint16_t filepath16[256];
 
-	/*ret = ampxiInit(0);
-	if(ret<0)
-	{
-		if(ret==0xd8e06406)
-		{
-			printf("The AMPXI service is inaccessible. Attempting to get access via kernelmode, this will hang the system if svcBackdoor isn't accessible.\n");
-			initsrv_allservices();
-			printf("Attempting to init the AMPXI service-handle again...\n");
-			ret = ampxiInit(0);
-			if(ret==0)printf("AMPXI init was successful.\n");
-		}
-		if(ret<0)return ret;
-	}
-
-	ret = AMPXI_WriteTWLSavedata(ent->titleid, savebuf, savesize, 0, 5, 11);
-	if(ret<0)printf("AMPXI_WriteTWLSavedata failed: 0x%08x.\n", (unsigned int)ret);
-
-	if(ret==0)
-	{
-		ret = AMPXI_InstallTitlesFinish(MEDIATYPE_NAND, 0, 1, &ent->titleid);
-		if(ret<0)printf("AMPXI_InstallTitlesFinish failed: 0x%08x.\n", (unsigned int)ret);
-	}
-
-	ampxiExit();*/
-
 	printf("Getting AM-module PID...\n");
-	ret = terminatelaunch_am(1, &ampid);
+	ret = launch_am(&ampid);
 	if(R_FAILED(ret))return ret;
 
 	printf("SVCs will now be used which are normally not accessible, this will hang if these are not accessible.\n");
@@ -333,10 +305,7 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 
 	printf("AM-module patching finished.\n");
 
-	ret = amInit();
-	if(R_FAILED(ret))return ret;
-
-	workbuf_size+= 0x20000;
+	workbuf_size+= savesize;
 
 	workbuf = malloc(workbuf_size);
 	if(workbuf==NULL)
@@ -387,8 +356,6 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 	FSFILE_Close(filehandle);
 
 	free(workbuf);
-
-	amExit();
 
 	return ret;
 }
@@ -446,8 +413,6 @@ int main(int argc, char **argv)
 
 			ret = loadnand_dsiware_titlelist();
 
-			amExit();
-
 			if(ret)printf("Failed to load the DSiWare titlelist: 0x%08x.\n", (unsigned int)ret);
 		}
 
@@ -491,17 +456,6 @@ int main(int argc, char **argv)
 				}
 			}
 
-			/*if(ret==0)
-			{
-				printf("Terminating the AM sysmodule...\n");
-				ret = terminatelaunch_am(0, NULL);
-				if(ret==0)
-				{
-					reboot_required = 1;
-					svcSleepThread(1000000000ULL);//Sleep 1 second.
-				}
-			}*/
-
 			if(ret==0)
 			{
 				printf("Installing the savedata...\n");
@@ -510,9 +464,6 @@ int main(int argc, char **argv)
 			}
 
 			if(savebuf)free(savebuf);
-
-			//printf("Launching the AM sysmodule...\n");
-			//terminatelaunch_am(1, NULL);
 
 			if(ret==0)
 			{
@@ -525,6 +476,8 @@ int main(int argc, char **argv)
 			}
 		}
 	}
+
+	amExit();
 
 	if(ret!=0)printf("An error occured. You can report this to here if it persists(or comment on an already existing issue if needed), with a screenshot: https://github.com/yellows8/3ds_dsiwarehax_installer/issues\n");
 
