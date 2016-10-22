@@ -111,6 +111,59 @@ void displaymessage_waitbutton()
 	}
 }
 
+int locate_pattern(u32 *out, u32 stride, u32 baseaddr, u8 *addr, u32 size, u8 *cmphash, u32 hashblocksize, u8 *patternmask, u32 patternmask_size)//Based on code from ropgadget_patternfinder.
+{
+	Result ret=0;
+	u32 pos=0, i=0;
+	u8 *tmpbuf = NULL;
+
+	u8 calchash[0x20];
+
+	memset(calchash, 0, sizeof(calchash));
+
+	*out = 0;
+
+	tmpbuf = malloc(hashblocksize);
+	if(tmpbuf==NULL)
+	{
+		printf("Failed to alloc tmpbuf in locate_pattern().\n");
+		return -8;
+	}
+
+	memset(tmpbuf, 0, hashblocksize);
+
+	for(pos=0; pos<size-hashblocksize; pos+=stride)
+	{
+		memcpy(tmpbuf, &addr[pos], hashblocksize);
+
+		if(patternmask)
+		{
+			for(i=0; i<hashblocksize; i++)
+			{
+				if(i<patternmask_size)tmpbuf[i] &= patternmask[i];
+			}
+		}
+
+		ret = FSUSER_UpdateSha256Context(tmpbuf, hashblocksize, calchash);
+		if(R_FAILED(ret))
+		{
+			printf("FSUSER_UpdateSha256Context() failed: 0x%08x.\n", (unsigned int)ret);
+			free(tmpbuf);
+			return ret;
+		}
+
+		if(memcmp(cmphash, calchash, 0x20)==0)
+		{
+			*out = baseaddr+pos;
+			return 0;
+		}
+	}
+
+	free(tmpbuf);
+
+	return -7;
+}
+
 Result load_file(char *path, u8 *buffer, u32 size, u32 *readsize)
 {
 	FILE *f;
@@ -253,14 +306,26 @@ Result launch_am(u32 *pid)
 
 Result setup_am_patches(u8 *tmpbuf, u32 tmpbuf_size, u32 *out_offset)
 {
+	Result ret=0;
 	u8 *amtext = (u8*)0x0f000000;
-	u32 ampxi_funcoffset = 0x0010e568-0x00100000;
+	u32 ampxi_funcoffset = 0;
+
+	u32 patternsize = 0x56;
+	u8 cmphash0[0x20] = {0x1d, 0x92, 0x4f, 0x36, 0xe1, 0x3a, 0xf7, 0x53, 0xb0, 0x03, 0x8c, 0x21, 0xba, 0x31, 0xea, 0xd6, 0x79, 0x31, 0x3e, 0xcb, 0x49, 0xe7, 0x7f, 0x78, 0xc7, 0x23, 0xf1, 0x27, 0x90, 0x58, 0x86, 0x48};
+	u8 patternmask0[0x56] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 	//Target function is LT_10e568/pxiam_cmd46, called @ thumb 0x10d1ee. (sysmodule v9217 from >=10.0.0-27)
 
-	if(out_offset)*out_offset = ampxi_funcoffset;
-
 	if(tmpbuf_size < 8+amstub_size)return -1;
+
+	ret = locate_pattern(&ampxi_funcoffset, 2, 0, amtext, 0x14000, cmphash0, patternsize, patternmask0, patternsize);
+	if(R_FAILED(ret))
+	{
+		printf("Failed to locate the target function in AM-module .text, this system-version likely isn't supported.\n");
+		return ret;
+	}
+
+	if(out_offset)*out_offset = ampxi_funcoffset;
 
 	memcpy(&tmpbuf[8], amtext, amstub_size);
 	memcpy(tmpbuf, &amtext[ampxi_funcoffset], 8);
@@ -334,6 +399,7 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 savesize)
 		return ret;
 	}
 
+	printf("Locating required addr in AM-module + patching the module...\n");
 	ret = setup_am_patches(tmpbuf, tmpbuf_size, &ampxi_funcoffset);
 	if(R_FAILED(ret))
 	{
