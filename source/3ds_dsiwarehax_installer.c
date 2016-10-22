@@ -309,6 +309,10 @@ Result setup_am_patches(u8 *tmpbuf, u32 tmpbuf_size, u32 *out_offset)
 	Result ret=0;
 	u8 *amtext = (u8*)0x0f000000;
 	u32 ampxi_funcoffset = 0;
+	u32 mapmem_size = 0x14000;
+
+	MemInfo am_meminfo;
+	PageInfo am_pageinfo;
 
 	u32 patternsize = 0x56;
 	u8 cmphash0[0x20] = {0x1d, 0x92, 0x4f, 0x36, 0xe1, 0x3a, 0xf7, 0x53, 0xb0, 0x03, 0x8c, 0x21, 0xba, 0x31, 0xea, 0xd6, 0x79, 0x31, 0x3e, 0xcb, 0x49, 0xe7, 0x7f, 0x78, 0xc7, 0x23, 0xf1, 0x27, 0x90, 0x58, 0x86, 0x48};
@@ -318,7 +322,19 @@ Result setup_am_patches(u8 *tmpbuf, u32 tmpbuf_size, u32 *out_offset)
 
 	if(tmpbuf_size < 8+amstub_size)return -1;
 
-	ret = locate_pattern(&ampxi_funcoffset, 2, 0, amtext, 0x14000, cmphash0, patternsize, patternmask0, patternsize);
+	memset(&am_meminfo, 0, sizeof(am_meminfo));
+	memset(&am_pageinfo, 0, sizeof(am_pageinfo));
+
+	ret = svcQueryMemory(&am_meminfo, &am_pageinfo, (u32)amtext);
+	if(R_FAILED(ret))
+	{
+		printf("svcQueryMemory failed: 0x%08x.\n", (unsigned int)ret);
+		return ret;
+	}
+
+	if(am_meminfo.size < mapmem_size)mapmem_size = am_meminfo.size;
+
+	ret = locate_pattern(&ampxi_funcoffset, 2, 0, amtext, mapmem_size, cmphash0, patternsize, patternmask0, patternsize);
 	if(R_FAILED(ret))
 	{
 		printf("Failed to locate the target function in AM-module .text, this system-version likely isn't supported.\n");
