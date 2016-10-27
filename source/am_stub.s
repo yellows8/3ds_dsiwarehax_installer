@@ -69,33 +69,46 @@ add r0, r0, #16
 ldr r2, [sp, #0x4c+8] @ writepos
 add r0, r0, r2
 
-ldrb r1, [sp, #0x4c+12] @ bufptr += (sectionindex-5) * 0x40000
+ldrb r1, [sp, #0x4c+12] @ bufptr += <size of each section from table before the current one> * 2
 sub r1, r1, #5
-ldr r2, =0x40000
-mul r3, r1, r2
-add r0, r0, r3
+mov r2, #0
+b amstub_bufptrcalclp_end
 
-ldr r2, [sp, #0x4c+4] @ r2 = size
-
+amstub_bufptrcalclp_start:
 ldr r3, [sp, #20]
 add r3, r3, #4
-str r2, [r3, r1, lsl #2] @ Write the input size to the table in the workbuf.
+ldr r3, [r3, r2, lsl #2]
+lsl r3, r3, #1
+add r0, r0, r3
+
+add r2, r2, #1
+
+amstub_bufptrcalclp_end:
+cmp r2, r1
+bcc amstub_bufptrcalclp_start
+
+ldrb r1, [sp, #0x4c+12]
+sub r1, r1, #5
+ldr r3, [sp, #20]
+add r3, r3, #4
+ldr r3, [r3, r1, lsl #2]
+
+ldr r2, [sp, #0x4c+4] @ r2 = size
 
 ldr r1, [sp, #0x4c] @ r1 = original bufptr
 
 str r0, [sp, #0x4c]
 
-ldr r3, =0x20000
-add r0, r0, r3 @ bufptr+= 0x20000
+add r0, r0, r3 @ bufptr+= <size of current section from table>
 
-amstub_cpylp: @ Copy the original input data to <override data_addr+0x20000> in the buffer.
+amstub_cpylp: @ Copy the original input data to <override data_addr+section_size> in the buffer.
 ldr r3, [r1], #4
 str r3, [r0], #4
 subs r2, r2, #4
 bgt amstub_cpylp
 
 amstub_lpstart:
-mov r1, #0
+/*mov r1, #0
 str r1, [sp, #24]
 
 amstub_lpbegin: @ Loop through the section flags in the buffer, for the section bit with each section.
@@ -148,7 +161,7 @@ ldr r1, [sp, #24]
 add r1, r1, #1
 str r1, [sp, #24]
 cmp r1, #3
-bcc amstub_lpbegin
+bcc amstub_lpbegin*/
 
 amstub_finish:
 add sp, sp, #28

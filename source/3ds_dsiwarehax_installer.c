@@ -410,6 +410,8 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 
 	Handle amproc = 0;
 	u32 ampxi_funcoffset=0;
 
+	u32 tmpoffset=0;
+
 	FS_Path archPath = { PATH_EMPTY, 1, (u8*)"" };
 	FS_Path filePath;
 
@@ -515,26 +517,29 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 
 	workbuf_header = (u32*)&workbuf[0x20000];
 
 	memset(workbuf, 0, workbuf_size);
+	tmpoffset = 0x10;
 	//The data starting at workbuf+0x20000 is custom data for the amstub. +0 = u32 flags, 3 words for each section size. Followed by 0x40000-bytes for each section: first 0x20000-bytes in each section is the override data, the remaining 0x20000 is the output data copied from the original input.
 	if(public_size)
 	{
 		workbuf_header[0] |= 0x3;
 		workbuf_header[1] = public_size;
-		memcpy(&workbuf_header[0x10>>2], savebuf, public_size);//Used by the amstub, so that this custom savedata is used instead of the data originally from the DSiWare export.
+		memcpy(&workbuf_header[tmpoffset>>2], savebuf, public_size);//Used by the amstub, so that this custom savedata is used instead of the data originally from the DSiWare export.
 	}
 
+	tmpoffset+= public_size*2;
 	if(banner_size)
 	{
 		workbuf_header[0] |= 0x3 << 3;
 		workbuf_header[2] = banner_size;
-		memcpy(&workbuf_header[(0x10 + 0x40000)>>2], &savebuf[0x20000], banner_size);
+		memcpy(&workbuf_header[tmpoffset>>2], &savebuf[0x100000], banner_size);
 	}
 
+	tmpoffset+= banner_size*2;
 	if(private_size)
 	{
 		workbuf_header[0] |= 0x3 << 6;
 		workbuf_header[3] = private_size;
-		memcpy(&workbuf_header[(0x10 + 0x80000)>>2], &savebuf[0x40000], private_size);
+		memcpy(&workbuf_header[tmpoffset>>2], &savebuf[0x200000], private_size);
 	}
 
 	ret = AM_ImportTwlBackup(filehandle, 11, workbuf, workbuf_size);
@@ -570,27 +575,33 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 
 	{
 		printf("Writing the original input import data to SD...\n");
 
+		tmpoffset = 0x10;
+		tmpoffset+= public_size;
 		if(workbuf_header[0] & 0x4)
 		{
-			ret = savefile_dsiwarehax(ent, "public_original.sav", &workbuf_header[(0x10 + 0x20000)>>2], workbuf_header[1]);
+			ret = savefile_dsiwarehax(ent, "public_original.sav", &workbuf_header[tmpoffset>>2], public_size);
 			if(ret==0)
 			{
 				printf("Successfully wrote public_original.sav.\n");
 			}
 		}
 
+		tmpoffset+= public_size;
+		tmpoffset+= banner_size;
 		if(workbuf_header[0] & (0x4<<3))
 		{
-			ret = savefile_dsiwarehax(ent, "banner_original.sav", &workbuf_header[(0x10 + 0x60000)>>2], workbuf_header[1]);
+			ret = savefile_dsiwarehax(ent, "banner_original.sav", &workbuf_header[tmpoffset>>2], banner_size);
 			if(ret==0)
 			{
 				printf("Successfully wrote banner_original.sav.\n");
 			}
 		}
 
+		tmpoffset+= banner_size;
+		tmpoffset+= private_size;
 		if(workbuf_header[0] & (0x4<<6))
 		{
-			ret = savefile_dsiwarehax(ent, "private_original.sav", &workbuf_header[(0x10 + 0xa0000)>>2], workbuf_header[1]);
+			ret = savefile_dsiwarehax(ent, "private_original.sav", &workbuf_header[tmpoffset>>2], private_size);
 			if(ret==0)
 			{
 				printf("Successfully wrote private_original.sav.\n");
@@ -609,7 +620,7 @@ int main(int argc, char **argv)
 	u32 pos;
 
 	u8 *savebuf;
-	u32 savebuf_maxsize = 0x100000;
+	u32 savebuf_maxsize = 0x300000;
 	u32 public_size=0, banner_size=0, private_size=0;
 
 	char headerstr[512];
@@ -684,26 +695,29 @@ int main(int argc, char **argv)
 				printf("Failed to allocate memory for the savedata.\n");
 				ret = -2;
 			}
-			memset(savebuf, 0, savebuf_maxsize);
+			else
+			{
+				memset(savebuf, 0, savebuf_maxsize);
+			}
 
 			if(ret==0)
 			{
 				printf("Loading the savedata from SD...\n");
-				ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "public.sav", savebuf, 0x20000, &public_size);
+				ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "public.sav", savebuf, 0x100000, &public_size);
 				if(ret)
 				{
 					printf("Failed to load the dsiwarehax public.sav: 0x%08x.\n", (unsigned int)ret);
 				}
 				else
 				{
-					ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "banner.sav", &savebuf[0x20000], 0x20000, &banner_size);
+					ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "banner.sav", &savebuf[0x100000], 0x100000, &banner_size);
 					if(ret)
 					{
 						printf("Skipping banner.sav importing.\n");
 						ret = 0;
 					}
 
-					ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "private.sav", &savebuf[0x40000], 0x20000, &private_size);
+					ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "private.sav", &savebuf[0x200000], 0x100000, &private_size);
 					if(ret)
 					{
 						printf("Skipping private.sav importing.\n");

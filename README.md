@@ -3,9 +3,9 @@ This is a 3DS homebrew application for installing DSiWare savedata exploits, for
 Eventually a release-archive containing the app + the required DSiWare exploits should be released.
 
 # SD layout
-The input \*.sav size must be <=0x20000. Due to this the DSiWare grtpwn exploit can't installed currently.
+This section can be ignored if you *just* want to install dsiwarehax with the release-archive.
 
-The rest of this section isn't really needed if you *just* want to install dsiwarehax with the release-archive.
+The input \*.sav size must be <=0x100000.
 
 The input data for DSiWare is located under the "dsiware/" directory where the .3dsx runs from. Then under this directory there's directories for each title using the titleID-low, for example: "4B464445". Under each title directory is the actual input data:
 * "info": Required, the directory won't be detected on SD otherwise. Contains the display-text for this entry, normally the exploit name. This shouldn't contain any newlines(any text following newlines won't be displayed).
