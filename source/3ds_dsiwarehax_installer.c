@@ -25,6 +25,8 @@ extern u8 ampatch_start[];
 extern u8 amstub_start[];
 extern u32 amstub_size;
 
+void initsrv_allservices();
+
 void display_menu(char **menu_entries, int total_entries, int *menuindex, char *headerstr)
 {
 	int i;
@@ -320,7 +322,7 @@ Result savefile_dsiwarehax(dsiware_entry *ent, char *path, void* savebuf, u32 sa
 	return save_file(str, savebuf, savebuf_size);
 }
 
-Result launch_am(u32 *pid)
+Result terminatelaunch_am(u32 type, u32 *pid)
 {
 	Result ret=0;
 	u64 titleid = 0x0004013000001502ULL;
@@ -328,7 +330,8 @@ Result launch_am(u32 *pid)
 	ret = nsInit();
 	if(ret)return ret;
 
-	ret = NS_LaunchTitle(titleid, 0, pid);
+	if(type==0)ret = NS_TerminateProcessTID(titleid);
+	if(type==1)ret = NS_LaunchTitle(titleid, 0, pid);
 
 	nsExit();
 
@@ -397,7 +400,7 @@ Result restore_amtext(u8 *tmpbuf, u32 tmpbuf_size, u32 ampxi_funcoffset)
 	return 0;
 }
 
-Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 banner_size, u32 private_size)
+Result install_dsiwarehax(int *reboot_required, dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 banner_size, u32 private_size)
 {
 	Result ret=0;
 	u8 *tmpbuf = NULL;
@@ -411,6 +414,7 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 
 	u32 ampxi_funcoffset=0;
 
 	u32 tmpoffset=0;
+	u32 pos;
 
 	FS_Path archPath = { PATH_EMPTY, 1, (u8*)"" };
 	FS_Path filePath;
@@ -424,7 +428,7 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 
 	memset(tmpbuf, 0, tmpbuf_size);
 
 	printf("Getting AM-module PID...\n");
-	ret = launch_am(&ampid);
+	ret = terminatelaunch_am(1, &ampid);
 	if(R_FAILED(ret))
 	{
 		free(tmpbuf);
@@ -610,6 +614,50 @@ Result install_dsiwarehax(dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 
 		ret = 0;
 	}
 
+	if(ret==0 && ((workbuf_header[0] & 0x124)>>2 != (workbuf_header[0] & 0x49)))//Executed when some savefiles were not handled by the amstub due to not being used by the title.
+	{
+		printf("Terminating AM-module...\n");
+		ret = terminatelaunch_am(0, NULL);
+		if(R_FAILED(ret))
+		{
+			free(tmpbuf);
+			return ret;
+		}
+
+		*reboot_required = 1;
+
+		printf("Writing additional savefile(s) to NAND...\n");
+
+		ret = ampxiInit(0);
+		if(ret<0)
+		{
+			if(ret==0xd8e06406)
+			{
+				printf("The AMPXI service is inaccessible. Attempting to get access via kernelmode, this will hang the system if svcBackdoor isn't accessible.\n");
+				initsrv_allservices();
+				printf("Attempting to init the AMPXI service-handle again...\n");
+				ret = ampxiInit(0);
+				if(ret==0)printf("AMPXI init was successful.\n");
+			}
+			if(ret<0)return ret;
+		}
+
+		for(pos=0; pos<3; pos++)
+		{
+			if(workbuf_header[0] & (0x4 << (pos*3)))continue;//Skip sections handled by the amstub.
+			if((workbuf_header[0] & (0x1 << (pos*3))) == 0)continue;//Skip sections which were not loaded from the input SD data.
+
+			ret = AMPXI_WriteTWLSavedata(ent->titleid, &savebuf[0x100000*pos], workbuf_header[1+pos], 0, 5+pos, 11);
+			if(ret<0)
+			{
+				printf("AMPXI_WriteTWLSavedata with section%u failed: 0x%08x.\n", (unsigned int)ret, (unsigned int)(5+pos));
+				break;
+			}
+		}
+
+		ampxiExit();
+	}
+
 	return ret;
 }
 
@@ -618,6 +666,7 @@ int main(int argc, char **argv)
 	Result ret = 0;
 	int menuindex = 0;
 	u32 pos;
+	int reboot_required = 0;
 
 	u8 *savebuf;
 	u32 savebuf_maxsize = 0x300000;
@@ -729,7 +778,7 @@ int main(int argc, char **argv)
 			if(ret==0)
 			{
 				printf("Preparing exploit installation...\n");
-				ret = install_dsiwarehax(&dsiware_list[menuindex], savebuf, public_size, banner_size, private_size);
+				ret = install_dsiwarehax(&reboot_required, &dsiware_list[menuindex], savebuf, public_size, banner_size, private_size);
 				if(ret)printf("Failed to install the savedata: 0x%08x.\n", (unsigned int)ret);
 			}
 
@@ -757,6 +806,7 @@ int main(int argc, char **argv)
 	}
 
 	printf("Press the START button to exit.\n");
+	if(reboot_required)printf("The system will also do a hardware reboot.\n");
 	// Main loop
 	while (aptMainLoop())
 	{
@@ -766,6 +816,14 @@ int main(int argc, char **argv)
 		u32 kDown = hidKeysDown();
 		if (kDown & KEY_START)
 			break; // break in order to return to hbmenu
+	}
+
+	if(reboot_required)
+	{
+		consoleClear();
+		gfxExit();
+		APT_HardwareResetAsync();//Do a hardware reboot.
+		return 0;
 	}
 
 	// Exit services
