@@ -762,15 +762,21 @@ int main(int argc, char **argv)
 					ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "banner.sav", &savebuf[0x100000], 0x100000, &banner_size);
 					if(ret)
 					{
-						printf("Skipping banner.sav importing.\n");
 						ret = 0;
+					}
+					else
+					{
+						printf("Importing banner.sav.\n");
 					}
 
 					ret = loadfile_dsiwarehax(&dsiware_list[menuindex], "private.sav", &savebuf[0x200000], 0x100000, &private_size);
 					if(ret)
 					{
-						printf("Skipping private.sav importing.\n");
 						ret = 0;
+					}
+					else
+					{
+						printf("Importing private.sav.\n");
 					}
 				}
 			}
