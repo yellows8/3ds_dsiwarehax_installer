@@ -1,8 +1,19 @@
-This is a 3DS homebrew application for installing DSiWare savedata exploits, for DSiWare titles which you already have installed. This is intended as a .3dsx which requires access to SVCs which are normally not accessible(**arm11kernelhax/whatever required**).
+This is a 3DS homebrew application for installing DSiWare savedata exploits, for DSiWare titles which you already have installed. This is intended as a .3dsx which requires access to SVCs which are normally not accessible(**arm11kernelhax/"cfw" required**).
+
+This application *itself* does not use any exploits during installation that could be fixed.
 
 When there's any input savefiles on SD where the DSiWare doesn't use those savefiles, AMPXI will be used to write those files to NAND with the \*.new filenames. This involves svcBackdoor. After doing so, a hw-reboot will be enabled when exiting the app. This is intended for DSiWare exploit(s) which load from \*.new filename(s) due to not enough space in the main savedata.
 
-Eventually a release-archive containing the app + the required DSiWare exploits should be released.
+This can be used for general DSiWare saveimage import/export as well.
+
+Before using this, you should have DSiWare export(s) from System Settings Data Management on SD for the target titles(in case you ever need to import the original later).
+
+# Included DSiWare exploits
+The release-archive includes the following:
+* The exact same exploit saveimages(plaintext) from when the exploits were released for DSi. This includes sudokuhax, even though it's not really useful on 3DS anyway(since the original title-version isn't officially available for 3DS).
+* [4swordshax](https://github.com/yellows8/dsi) for "The Legend of Zelda: Four Swords Anniversary Edition", only USA/EUR regions are supported. This will only display a red sub-screen since the payload can't be loaded.
+
+The source for these DSiWare exploits is available [here](https://github.com/yellows8/dsi).
 
 # SD layout
 This section can be ignored if you *just* want to install dsiwarehax with the release-archive.
