@@ -32,7 +32,7 @@ SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
 
-VERSION	:=	v1.0
+VERSION	:=	v1.1
 
 APP_TITLE	:=	3ds_dsiwarehax_installer $(VERSION)
 APP_DESCRIPTION	:=	Tool for installing dsiwarehax on 3DS.

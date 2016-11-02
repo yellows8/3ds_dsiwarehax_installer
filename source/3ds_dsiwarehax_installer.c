@@ -402,7 +402,7 @@ Result restore_amtext(u8 *tmpbuf, u32 tmpbuf_size, u32 ampxi_funcoffset)
 
 Result install_dsiwarehax(int *reboot_required, dsiware_entry *ent, u8 *savebuf, u32 public_size, u32 banner_size, u32 private_size)
 {
-	Result ret=0;
+	Result ret=0, ret2=0;
 	u8 *tmpbuf = NULL;
 	u32 tmpbuf_size = 0x1000;
 	u8 *workbuf = NULL;
@@ -546,12 +546,10 @@ Result install_dsiwarehax(int *reboot_required, dsiware_entry *ent, u8 *savebuf,
 		memcpy(&workbuf_header[tmpoffset>>2], &savebuf[0x200000], private_size);
 	}
 
-	ret = AM_ImportTwlBackup(filehandle, 11, workbuf, workbuf_size);
+	ret2 = AM_ImportTwlBackup(filehandle, 11, workbuf, workbuf_size);
+	if(R_FAILED(ret2))printf("AM_ImportTwlBackup failed: 0x%08x.\n", (unsigned int)ret2);
 
 	FSFILE_Close(filehandle);
-
-	memset(workbuf, 0, workbuf_size);
-	free(workbuf);
 
 	printf("Restoring AM-module .text...\n");
 
@@ -559,6 +557,7 @@ Result install_dsiwarehax(int *reboot_required, dsiware_entry *ent, u8 *savebuf,
 	if(R_FAILED(ret))
 	{
 		free(tmpbuf);
+		free(workbuf);
 		svcCloseHandle(amproc);
 		return ret;
 	}
@@ -568,12 +567,21 @@ Result install_dsiwarehax(int *reboot_required, dsiware_entry *ent, u8 *savebuf,
 	free(tmpbuf);
 	if(R_FAILED(ret))
 	{
+		free(workbuf);
 		svcCloseHandle(amproc);
 		return ret;
 	}
 
 	ret = svcUnmapProcessMemory(amproc, 0x0f000000, 0x14000);
 	svcCloseHandle(amproc);
+
+	if(R_FAILED(ret2))
+	{
+		printf("Aborting since AM_ImportTwlBackup failed...\n");
+		free(workbuf);
+		svcCloseHandle(amproc);
+		return ret2;
+	}
 
 	if(ret==0 && workbuf_header[0] & 0x124)
 	{
@@ -621,6 +629,7 @@ Result install_dsiwarehax(int *reboot_required, dsiware_entry *ent, u8 *savebuf,
 		if(R_FAILED(ret))
 		{
 			free(tmpbuf);
+			free(workbuf);
 			return ret;
 		}
 
@@ -657,6 +666,9 @@ Result install_dsiwarehax(int *reboot_required, dsiware_entry *ent, u8 *savebuf,
 
 		ampxiExit();
 	}
+
+	memset(workbuf, 0, workbuf_size);
+	free(workbuf);
 
 	return ret;
 }
