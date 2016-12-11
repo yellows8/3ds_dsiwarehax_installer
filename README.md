@@ -1,4 +1,4 @@
-This is a 3DS homebrew application for installing DSiWare savedata exploits, for DSiWare titles which you already have installed. This is intended as a .3dsx which requires access to SVCs which are normally not accessible(**arm11kernelhax/"cfw" required**).
+This is a 3DS homebrew application for installing DSiWare savedata exploits, for DSiWare titles which you already have installed. This is intended as a .3dsx which requires access to SVCs which are normally not accessible(**arm11kernelhax/"cfw" required**). Regarding kernelhax: from the beginning this application was designed to be used with kernelhax which run under a *completely* *seperate* and *standalone* kernelhax-app, the proper way to handle it(when using kernelhax at all). This was never meant to bunded with any kernelhax in the application build.
 
 This application *itself* does not use any exploits during installation that could be fixed.
 
