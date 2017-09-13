@@ -11,7 +11,7 @@ Before using this, you should have DSiWare export(s) from System Settings Data M
 # Included DSiWare exploits
 The release-archive includes the following:
 * The exact same exploit saveimages(plaintext) from when the exploits were released for DSi. This includes sudokuhax, even though it's not really useful on 3DS anyway(since the original title-version isn't officially available for 3DS).
-* [4swordshax](https://github.com/yellows8/dsi) for "The Legend of Zelda: Four Swords Anniversary Edition", only USA/EUR regions are supported.
+* [4swordshax](https://github.com/yellows8/dsi) for "The Legend of Zelda: Four Swords Anniversary Edition", USA/EUR/JPN regions are supported.
 
 The source for these DSiWare exploits is available [here](https://github.com/yellows8/dsi).
 
